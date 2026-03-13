@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>runTOit — Route Generator</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Variables ──────────────────────────────────────────────── */
+    :root {
+      --bg:        #080c10;
+      --surface:   #0f1419;
+      --surface2:  #161d26;
+      --border:    #1e2a38;
+      --accent:    #b8ff3c;
+      --accent2:   #3cffb8;
+      --muted:     #4a5a6a;
+      --text:      #d8e8f0;
+      --text-dim:  #6a8090;
+      --danger:    #ff4c5e;
+      --panel-w:   380px;
+      --header-h:  54px;
+    }
+
+    /* ── Reset / base ───────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    #shell {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    #header {
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--panel-w);
+      height: var(--header-h);
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 20px;
+      z-index: 1000;
+    }
+
+    #header .logo-mark {
+      width: 28px; height: 28px;
+      background: var(--accent);
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      flex-shrink: 0;
+      position: relative;
+    }
+    #header .logo-mark::after {
+      content: '';
+      position: absolute;
+      inset: 5px;
+      background: var(--bg);
+      border-radius: 50%;
+    }
+
+    #header h1 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    #header h1 span {
+      color: var(--text-dim);
+      font-weight: 400;
+    }
+
+    /* ── Panel ──────────────────────────────────────────────────── */
+    #panel {
+      position: fixed;
+      top: var(--header-h);
+      left: 0;
+      width: var(--panel-w);
+      height: calc(100vh - var(--header-h));
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 900;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    #panel::-webkit-scrollbar { width: 4px; }
+    #panel::-webkit-scrollbar-track { background: transparent; }
+    #panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Map ────────────────────────────────────────────────────── */
+    #map {
+      position: fixed;
+      top: 0;
+      left: var(--panel-w);
+      width: calc(100vw - var(--panel-w));
+      height: 100vh;
+      z-index: 1;
+    }
+
+    /* Dark map tiles overlay */
+    .leaflet-tile { filter: brightness(0.85) saturate(0.7) hue-rotate(10deg); }
+
+    /* ── Section headers ────────────────────────────────────────── */
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 20px 8px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .section-head::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Form rows ──────────────────────────────────────────────── */
+    .form-block {
+      padding: 4px 20px 8px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .form-group.full { grid-column: 1 / -1; }
+
+    label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    input[type="number"], input[type="range"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      padding: 7px 10px;
+      outline: none;
+      transition: border-color .15s;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"]:focus { border-color: var(--accent); }
+
+    input[type="range"] {
+      padding: 0;
+      height: 32px;
+      cursor: pointer;
+      -webkit-appearance: none;
+      background: transparent;
+      border: none;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: -5px;
+      cursor: pointer;
+      transition: transform .1s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+    }
+
+    .range-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .range-row input[type="range"] { flex: 1; }
+    .range-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* ── Toggle (p2p switch) ────────────────────────────────────── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 20px;
+      cursor: pointer;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2px;
+      user-select: none;
+    }
+    .toggle-row:hover { background: var(--surface2); }
+    .toggle-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .5px;
+      color: var(--text);
+    }
+    .toggle-switch {
+      position: relative;
+      width: 36px; height: 20px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input { display: none; }
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 10px;
+      transition: background .2s;
+    }
+    .toggle-thumb {
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 14px; height: 14px;
+      background: var(--muted);
+      border-radius: 50%;
+      transition: transform .2s, background .2s;
+    }
+    .toggle-switch input:checked ~ .toggle-track { background: var(--accent); }
+    .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(16px); background: var(--bg); }
+
+    /* ── Map hint bar ───────────────────────────────────────────── */
+    #map-hint {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 10px 20px;
+      background: rgba(8,12,16,0.88);
+      backdrop-filter: blur(6px);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+      z-index: 10;
+    }
+    #map-hint .hint-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot-start { width: 8px; height: 8px; border-radius: 50%; background: #3cffa0; }
+    .dot-end   { width: 8px; height: 8px; border-radius: 50%; background: #ff5c7a; }
+
+    /* ── Active placement indicator ─────────────────────────────── */
+    #placement-indicator {
+      position: absolute;
+      top: 16px; left: 50%;
+      transform: translateX(-50%);
+      padding: 7px 18px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s;
+      z-index: 10;
+    }
+    #placement-indicator.active { opacity: 1; }
+    #placement-indicator.start {
+      background: rgba(60, 255, 160, 0.15);
+      border: 1px solid #3cffa0;
+      color: #3cffa0;
+    }
+    #placement-indicator.end {
+      background: rgba(255, 92, 122, 0.15);
+      border: 1px solid #ff5c7a;
+      color: #ff5c7a;
+    }
+
+    /* ── Coordinate display cards ───────────────────────────────── */
+    .coord-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .coord-card:hover { border-color: var(--muted); }
+    .coord-card.active-start { border-color: #3cffa0; }
+    .coord-card.active-end   { border-color: #ff5c7a; }
+    .coord-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .coord-dot.start { background: #3cffa0; }
+    .coord-dot.end   { background: #ff5c7a; }
+    .coord-info { flex: 1; }
+    .coord-name {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+    }
+    .coord-vals {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .coord-action {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: .5px;
+    }
+    .coord-card.active-start .coord-action { color: #3cffa0; }
+    .coord-card.active-end   .coord-action { color: #ff5c7a; }
+
+    /* ── Advanced toggle ────────────────────────────────────────── */
+    #adv-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 11px;
+      letter-spacing: .5px;
+      user-select: none;
+      transition: color .15s;
+    }
+    #adv-toggle:hover { color: var(--text); }
+    #adv-toggle .chevron {
+      font-size: 10px;
+      transition: transform .25s;
+    }
+    #adv-toggle.open .chevron { transform: rotate(180deg); }
+    #adv-body {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height .3s ease;
+    }
+    #adv-body.open { max-height: 300px; }
+
+    /* ── Generate button ────────────────────────────────────────── */
+    #btn-generate {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: calc(100% - 40px);
+      margin: 12px 20px 16px;
+      padding: 14px;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 5px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      position: relative;
+      overflow: hidden;
+    }
+    #btn-generate::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transform: translateX(-100%);
+      transition: transform .5s;
+    }
+    #btn-generate:hover::after { transform: translateX(100%); }
+    #btn-generate:hover { opacity: 0.9; }
+    #btn-generate:active { transform: scale(0.98); }
+    #btn-generate:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #btn-generate:disabled::after { display: none; }
+
+    /* ── Spinner ────────────────────────────────────────────────── */
+    .spinner {
+      display: none;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-top-color: var(--bg);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results panel ──────────────────────────────────────────── */
+    #results {
+      margin: 0 20px 20px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity .3s, transform .3s;
+    }
+    #results.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #results.error { border-color: var(--danger); }
+
+    #results-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    #results-header .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    #results.error #results-header .status-dot { background: var(--danger); }
+
+    #results-body { padding: 12px 14px; }
+    #error-msg { color: var(--danger); font-size: 12px; line-height: 1.5; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .stat-item {
+      background: var(--surface2);
+      border-radius: 4px;
+      padding: 8px 10px;
+    }
+    .stat-label {
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 3px;
+    }
+    .stat-value {
+      font-size: 18px;
+      font-weight: 600;
+      font-family: 'Barlow Condensed', sans-serif;
+      color: var(--accent);
+    }
+    .stat-unit {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-left: 2px;
+    }
+
+    /* ── Download button ────────────────────────────────────────── */
+    #btn-download {
+      display: none;
+      width: 100%;
+      margin-top: 10px;
+      padding: 8px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-dim);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      letter-spacing: .5px;
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    #btn-download:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Map overlays ───────────────────────────────────────────── */
+    #map-wrapper {
+      position: fixed;
+      top: 0;
+      left: var(--panel-w);
+      width: calc(100vw - var(--panel-w));
+      height: 100vh;
+      z-index: 1;
+    }
+
+    /* Loading overlay on map */
+    #map-loading {
+      position: absolute;
+      inset: 0;
+      background: rgba(8,12,16,0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+    #map-loading.active { opacity: 1; pointer-events: all; }
+    #map-loading .big-spinner {
+      width: 44px; height: 44px;
+      border: 3px solid rgba(184,255,60,0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .9s linear infinite;
+    }
+    #map-loading p {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+
+    /* ── Custom Leaflet markers ─────────────────────────────────── */
+    .custom-marker {
+      width: 28px !important;
+      height: 28px !important;
+      margin-left: -14px !important;
+      margin-top: -14px !important;
+    }
+    .marker-inner {
+      width: 28px; height: 28px;
+      border-radius: 50% 50% 50% 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--bg);
+      transform: rotate(-45deg);
+      box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+    }
+    .marker-inner span { transform: rotate(45deg); }
+    .marker-start .marker-inner { background: #3cffa0; }
+    .marker-end   .marker-inner { background: #ff5c7a; }
+
+    /* ── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 700px) {
+      :root { --panel-w: 100vw; }
+      #map-wrapper { display: none; }
+      #panel { height: calc(100vh - var(--header-h)); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────── -->
+<div id="header">
+  <div class="logo-mark"></div>
+  <h1>run<span>TO</span>it</h1>
+</div>
+
+<!-- ── Sidebar panel ───────────────────────────────────────────────── -->
+<div id="panel">
+
+  <!-- Coordinates -->
+  <div class="section-head">Coordinates</div>
+  <div class="form-block">
+    <div class="coord-card" id="card-start" onclick="setPlacementMode('start')">
+      <div class="coord-dot start"></div>
+      <div class="coord-info">
+        <div class="coord-name">Start point</div>
+        <div class="coord-vals" id="val-start">43.642538, −79.397122</div>
+      </div>
+      <div class="coord-action" id="action-start">click to place ›</div>
+    </div>
+  </div>
+
+  <!-- P2P toggle -->
+  <div class="toggle-row" onclick="toggleP2P()">
+    <span class="toggle-label">Point-to-point (instead of loop)</span>
+    <label class="toggle-switch">
+      <input type="checkbox" id="chk-p2p" checked />
+      <div class="toggle-track"></div>
+      <div class="toggle-thumb"></div>
+    </label>
+  </div>
+
+  <div id="end-block" class="form-block" style="margin-top:8px;">
+    <div class="coord-card" id="card-end" onclick="setPlacementMode('end')">
+      <div class="coord-dot end"></div>
+      <div class="coord-info">
+        <div class="coord-name">End point</div>
+        <div class="coord-vals" id="val-end">43.645585, −79.380793</div>
+      </div>
+      <div class="coord-action" id="action-end">click to place ›</div>
+    </div>
+  </div>
+
+  <!-- Distance -->
+  <div class="section-head">Distance</div>
+  <div class="form-block">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Target (km)</label>
+        <input type="number" id="f-target-km" value="10" min="0.5" step="0.5" />
+      </div>
+      <div class="form-group">
+        <label>Tolerance (km)</label>
+        <input type="number" id="f-tolerance-km" value="1" min="0" step="0.1" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Trail preference -->
+  <div class="section-head">Trail Preference</div>
+  <div class="form-block">
+    <div class="form-group full">
+      <label>Target trail proportion — <span id="trail-pct">50%</span></label>
+      <div class="range-row">
+        <span style="font-size:10px;color:var(--text-dim)">Road</span>
+        <input type="range" id="f-trail-prop" min="0" max="1" step="0.05" value="0.5"
+               oninput="document.getElementById('trail-pct').textContent=Math.round(this.value*100)+'%'" />
+        <span style="font-size:10px;color:var(--text-dim)">Trail</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scoring weights -->
+  <div class="section-head">Scoring Weights</div>
+  <div class="form-block">
+    <div class="form-group full" style="margin-bottom:10px;">
+      <label>Distance match — <span id="w-dist-val">3</span>/5</label>
+      <input type="range" id="f-w-dist" min="1" max="5" step="1" value="3"
+             oninput="document.getElementById('w-dist-val').textContent=this.value" />
+    </div>
+    <div class="form-group full" style="margin-bottom:10px;">
+      <label>Trail match — <span id="w-trail-val">3</span>/5</label>
+      <input type="range" id="f-w-trail" min="1" max="5" step="1" value="3"
+             oninput="document.getElementById('w-trail-val').textContent=this.value" />
+    </div>
+    <div class="form-group full">
+      <label>Avoid arterial roads — <span id="w-art-val">3</span>/5</label>
+      <input type="range" id="f-w-art" min="1" max="5" step="1" value="3"
+             oninput="document.getElementById('w-art-val').textContent=this.value" />
+    </div>
+  </div>
+
+  <!-- Advanced -->
+  <div id="adv-toggle" onclick="toggleAdv()">
+    <span>Advanced settings</span>
+    <span class="chevron">▼</span>
+  </div>
+  <div id="adv-body">
+    <div class="form-block" style="padding-top:10px;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Candidates</label>
+          <input type="number" id="f-candidates" value="360" min="10" step="10" />
+        </div>
+        <div class="form-group">
+          <label>Radius (km)</label>
+          <input type="number" id="f-radius-km" value="6" min="0.5" step="0.5" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Random seed</label>
+          <input type="number" id="f-seed" value="42" step="1" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate -->
+  <button id="btn-generate" onclick="generateRoute()">
+    <div class="spinner" id="spinner"></div>
+    <span id="btn-label">Generate Route</span>
+  </button>
+
+  <!-- Results -->
+  <div id="results">
+    <div id="results-header">
+      <div class="status-dot"></div>
+      <span id="results-title">Route Found</span>
+    </div>
+    <div id="results-body"></div>
+  </div>
+
+</div>
+
+<!-- ── Map wrapper ──────────────────────────────────────────────────── -->
+<div id="map-wrapper">
+  <div id="map"></div>
+
+  <!-- Placement indicator -->
+  <div id="placement-indicator">Click map to place</div>
+
+  <!-- Loading overlay -->
+  <div id="map-loading">
+    <div class="big-spinner"></div>
+    <p>Calculating route…</p>
+  </div>
+
+  <!-- Map hint bar -->
+  <div id="map-hint">
+    <div class="hint-pill"><div class="dot-start"></div> Click card then map to place start</div>
+    <div class="hint-pill"><div class="dot-end"></div> Click card then map to place end</div>
+  </div>
+</div>
+
+<script>
+  // ── CONFIG — replace with your Render URL ──────────────────────────────
+  const API_URL = "https://YOUR_APP.onrender.com";
+
+  // ── State ──────────────────────────────────────────────────────────────
+  let startLatLng = { lat: 43.642538, lng: -79.397122 };
+  let endLatLng   = { lat: 43.645585, lng: -79.380793 };
+  let placementMode = null;   // 'start' | 'end' | null
+  let markerStart = null, markerEnd = null;
+  let routeLayer  = null;
+  let lastGeoJSON = null;
+
+  // ── Leaflet map ────────────────────────────────────────────────────────
+  const map = L.map('map', { zoomControl: false }).setView(
+    [(startLatLng.lat + endLatLng.lat) / 2, (startLatLng.lng + endLatLng.lng) / 2], 13
+  );
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19,
+  }).addTo(map);
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  // ── Custom marker icon ─────────────────────────────────────────────────
+  function makeIcon(type) {
+    const label = type === 'start' ? 'S' : 'E';
+    return L.divIcon({
+      className: `custom-marker marker-${type}`,
+      html: `<div class="marker-inner"><span>${label}</span></div>`,
+      iconSize: [28, 28], iconAnchor: [14, 14],
+    });
+  }
+
+  function refreshMarkers() {
+    if (markerStart) markerStart.remove();
+    if (markerEnd)   markerEnd.remove();
+
+    markerStart = L.marker([startLatLng.lat, startLatLng.lng], {
+      icon: makeIcon('start'), draggable: true,
+    }).addTo(map);
+
+    markerStart.on('dragend', e => {
+      const p = e.target.getLatLng();
+      startLatLng = { lat: p.lat, lng: p.lng };
+      updateCoordDisplay();
+    });
+
+    const isP2P = document.getElementById('chk-p2p').checked;
+    if (isP2P) {
+      markerEnd = L.marker([endLatLng.lat, endLatLng.lng], {
+        icon: makeIcon('end'), draggable: true,
+      }).addTo(map);
+      markerEnd.on('dragend', e => {
+        const p = e.target.getLatLng();
+        endLatLng = { lat: p.lat, lng: p.lng };
+        updateCoordDisplay();
+      });
+    }
+  }
+
+  function updateCoordDisplay() {
+    const fmt = (v, isLng) => {
+      const abs = Math.abs(v).toFixed(6);
+      const sign = v < 0 ? '−' : '';
+      return `${sign}${abs}`;
+    };
+    document.getElementById('val-start').textContent =
+      `${fmt(startLatLng.lat)}, ${fmt(startLatLng.lng)}`;
+    document.getElementById('val-end').textContent =
+      `${fmt(endLatLng.lat)}, ${fmt(endLatLng.lng)}`;
+  }
+
+  // ── Map click: place marker ────────────────────────────────────────────
+  map.on('click', e => {
+    if (!placementMode) return;
+    const { lat, lng } = e.latlng;
+    if (placementMode === 'start') {
+      startLatLng = { lat, lng };
+    } else {
+      endLatLng = { lat, lng };
+    }
+    updateCoordDisplay();
+    refreshMarkers();
+    setPlacementMode(null);
+  });
+
+  // ── Placement mode ─────────────────────────────────────────────────────
+  function setPlacementMode(mode) {
+    placementMode = mode;
+
+    // Update card styles
+    document.getElementById('card-start').classList.remove('active-start');
+    document.getElementById('card-end').classList.remove('active-end');
+    document.getElementById('action-start').textContent = 'click to place ›';
+    document.getElementById('action-end').textContent   = 'click to place ›';
+
+    const ind = document.getElementById('placement-indicator');
+    if (mode === 'start') {
+      document.getElementById('card-start').classList.add('active-start');
+      document.getElementById('action-start').textContent = 'now click the map ✓';
+      ind.className = 'active start';
+      ind.textContent = 'Click map to place START';
+      map.getContainer().style.cursor = 'crosshair';
+    } else if (mode === 'end') {
+      document.getElementById('card-end').classList.add('active-end');
+      document.getElementById('action-end').textContent = 'now click the map ✓';
+      ind.className = 'active end';
+      ind.textContent = 'Click map to place END';
+      map.getContainer().style.cursor = 'crosshair';
+    } else {
+      ind.className = '';
+      map.getContainer().style.cursor = '';
+    }
+  }
+
+  // ── P2P toggle ─────────────────────────────────────────────────────────
+  function toggleP2P() {
+    const chk = document.getElementById('chk-p2p');
+    chk.checked = !chk.checked;
+    document.getElementById('end-block').style.display = chk.checked ? '' : 'none';
+    refreshMarkers();
+  }
+
+  // ── Advanced toggle ────────────────────────────────────────────────────
+  function toggleAdv() {
+    const btn  = document.getElementById('adv-toggle');
+    const body = document.getElementById('adv-body');
+    btn.classList.toggle('open');
+    body.classList.toggle('open');
+  }
+
+  // ── Generate route ─────────────────────────────────────────────────────
+  async function generateRoute() {
+    const btn     = document.getElementById('btn-generate');
+    const spinner = document.getElementById('spinner');
+    const label   = document.getElementById('btn-label');
+    const loading = document.getElementById('map-loading');
+    const results = document.getElementById('results');
+
+    const isP2P = document.getElementById('chk-p2p').checked;
+
+    const body = {
+      start_lat:          startLatLng.lat,
+      start_lon:          startLatLng.lng,
+      end_lat:            isP2P ? endLatLng.lat : null,
+      end_lon:            isP2P ? endLatLng.lng : null,
+      target_km:          parseFloat(document.getElementById('f-target-km').value),
+      tolerance_km:       parseFloat(document.getElementById('f-tolerance-km').value),
+      target_trail_prop:  parseFloat(document.getElementById('f-trail-prop').value),
+      w_distance_match:   parseFloat(document.getElementById('f-w-dist').value),
+      w_trail_match:      parseFloat(document.getElementById('f-w-trail').value),
+      w_avoid_arterials:  parseFloat(document.getElementById('f-w-art').value),
+      candidates:         parseInt(document.getElementById('f-candidates').value),
+      waypoint_radius_km: parseFloat(document.getElementById('f-radius-km').value),
+      seed:               parseInt(document.getElementById('f-seed').value),
+    };
+
+    // UI: loading state
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    label.textContent = 'Calculating…';
+    loading.classList.add('active');
+    results.classList.remove('visible', 'error');
+
+    try {
+      const resp = await fetch(`${API_URL}/route`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(data.detail || `Server error ${resp.status}`);
+      }
+
+      showRoute(data);
+      showResults(data.summary);
+
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+      label.textContent = 'Generate Route';
+      loading.classList.remove('active');
+    }
+  }
+
+  // ── Draw route on map ──────────────────────────────────────────────────
+  function showRoute(data) {
+    if (routeLayer) routeLayer.remove();
+
+    routeLayer = L.geoJSON(data.geojson, {
+      style: {
+        color: '#b8ff3c',
+        weight: 5,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round',
+      },
+    }).addTo(map);
+
+    map.fitBounds(routeLayer.getBounds(), { padding: [60, 60] });
+    lastGeoJSON = data.geojson;
+    document.getElementById('btn-download').style.display = 'block';
+  }
+
+  // ── Show results panel ─────────────────────────────────────────────────
+  function showResults(summary) {
+    const results = document.getElementById('results');
+    results.classList.remove('error');
+    document.getElementById('results-title').textContent = 'Route Found';
+
+    const km     = (summary.length_km || 0).toFixed(2);
+    const trail  = ((summary.trail_ratio || 0) * 100).toFixed(0);
+    const art    = ((summary.arterial_ratio || 0) * 100).toFixed(0);
+    const score  = (summary.score || 0).toFixed(2);
+
+    document.getElementById('results-body').innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Distance</div>
+          <div class="stat-value">${km}<span class="stat-unit">km</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Trail</div>
+          <div class="stat-value">${trail}<span class="stat-unit">%</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Arterial</div>
+          <div class="stat-value">${art}<span class="stat-unit">%</span></div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Score</div>
+          <div class="stat-value">${score}</div>
+        </div>
+      </div>
+      <button id="btn-download" onclick="downloadGeoJSON()">⬇ Download GeoJSON</button>
+    `;
+
+    results.classList.add('visible');
+    results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── Show error ─────────────────────────────────────────────────────────
+  function showError(msg) {
+    const results = document.getElementById('results');
+    results.classList.add('error');
+    document.getElementById('results-title').textContent = 'Error';
+    document.getElementById('results-body').innerHTML =
+      `<div id="error-msg">${msg}</div>`;
+    results.classList.add('visible');
+  }
+
+  // ── Download GeoJSON ───────────────────────────────────────────────────
+  function downloadGeoJSON() {
+    if (!lastGeoJSON) return;
+    const blob = new Blob([JSON.stringify(lastGeoJSON, null, 2)],
+                          { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'route.geojson';
+    a.click();
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────
+  refreshMarkers();
+  updateCoordDisplay();
+</script>
+</body>
+</html>
