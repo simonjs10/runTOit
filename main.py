@@ -7,7 +7,7 @@ Start command:  uvicorn main:app --host 0.0.0.0 --port $PORT
 # Re-export the FastAPI app defined in the notebook's extracted source.
 # When deploying without Jupyter, copy the notebook cells into this file
 # or import the app object from your extracted module.
-
+from route_agent import app
 import uvicorn
 
 # ── If you have extracted the notebook to route_agent.py ──────────────────
