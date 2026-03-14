@@ -622,14 +622,26 @@ class RouteResponseError(BaseModel):
 # FastAPI application
 # ----------------------------
 
-app = FastAPI(
-    title="runTOit – Route Generator API",
-    description="Generates optimised running routes using OSMnx + A*.",
-    version="1.0.0",
-)
+from contextlib import asynccontextmanager
+import os
 
-# Allow all origins so a GitHub Pages frontend can call this API.
-# Restrict origins list in production if required.
+_G_LL   = None
+_G_PROJ = None
+
+GRAPH_LL_PATH   = os.environ.get("GRAPH_LL_PATH",   "toronto_walk_ll.graphml")
+GRAPH_PROJ_PATH = os.environ.get("GRAPH_PROJ_PATH", "toronto_walk_proj.graphml")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _G_LL, _G_PROJ
+    print(f"Loading graph from {GRAPH_LL_PATH} …")
+    _G_LL   = ox.load_graphml(GRAPH_LL_PATH)
+    _G_PROJ = ox.load_graphml(GRAPH_PROJ_PATH)
+    _G_PROJ = add_custom_edge_costs(_G_PROJ)
+    print("Graph ready ✓")
+    yield
+
+app = FastAPI(title="runTOit", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -637,30 +649,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.get("/health")
-def health() -> dict:
-    """Quick liveness probe — useful for Render / Railway health checks."""
-    return {"status": "ok"}
+def health():
+    loaded = _G_LL is not None
+    return {"status": "ok", "graph_loaded": loaded}
 
+@app.post("/route")
+def generate_route(body: RouteRequestBody):
+    if _G_LL is None or _G_PROJ is None:
+        raise HTTPException(status_code=503, detail="Graph not loaded yet, retry in a moment.")
 
-@app.post("/route", response_model=RouteResponseOK)
-def generate_route(body: RouteRequestBody) -> dict:
-    """
-    Generate the best running route for the supplied parameters.
-
-    Returns a JSON object with three keys:
-      - **summary**     – length, trail/arterial ratios, score
-      - **explanation** – human-readable score breakdown
-      - **geojson**     – FeatureCollection ready to drop into Leaflet / Mapbox
-    """
     req = RouteRequest(
-        start_lat=body.start_lat,
-        start_lon=body.start_lon,
-        end_lat=body.end_lat,
-        end_lon=body.end_lon,
-        target_km=body.target_km,
-        tolerance_km=body.tolerance_km,
+        start_lat=body.start_lat,       start_lon=body.start_lon,
+        end_lat=body.end_lat,           end_lon=body.end_lon,
+        target_km=body.target_km,       tolerance_km=body.tolerance_km,
         w_distance_match=body.w_distance_match,
         target_trail_prop=body.target_trail_prop,
         w_trail_match=body.w_trail_match,
@@ -671,10 +673,8 @@ def generate_route(body: RouteRequestBody) -> dict:
     )
 
     try:
-        G_ll, G_proj = load_walk_graphs_for_request(req)
-        G_proj = add_custom_edge_costs(G_proj)
-        result = plan_route_agent(G_proj, G_ll, req)
-    except Exception as exc:  # network / graph errors
+        result = plan_route_agent(_G_PROJ, _G_LL, req)
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     if not result["ok"]:
@@ -686,7 +686,6 @@ def generate_route(body: RouteRequestBody) -> dict:
         "explanation": result["explanation"],
         "geojson":     result["geojson"],
     }
-
 
 # ----------------------------
 # Launch the server
